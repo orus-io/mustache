@@ -27,6 +27,10 @@ type RenderFn func(text string) (string, error)
 // represents. The zero TagType is not a valid type.
 type TagType uint
 
+type CustomLookup interface {
+	Lookup(name string) (reflect.Value, error)
+}
+
 // Defines representing the possible Tag types
 const (
 	Invalid TagType = iota
@@ -492,6 +496,15 @@ func lookup(contextChain []interface{}, name string, allowMissing bool) (reflect
 Outer:
 	for _, ctx := range contextChain {
 		v := ctx.(reflect.Value)
+		if custom, ok := v.Interface().(CustomLookup); ok {
+			v, err := custom.Lookup(name)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			if v.IsValid() {
+				return v, nil
+			}
+		}
 		for v.IsValid() {
 			typ := v.Type()
 			if n := v.Type().NumMethod(); n > 0 {
@@ -580,43 +593,47 @@ func renderSection(section *sectionElement, contextChain []interface{}, buf io.W
 	if isEmpty && !section.inverted || !isEmpty && section.inverted {
 		return nil
 	} else if !section.inverted {
-		valueInd := indirect(value)
-		switch val := valueInd; val.Kind() {
-		case reflect.Slice:
-			for i := 0; i < val.Len(); i++ {
-				contexts = append(contexts, val.Index(i))
-			}
-		case reflect.Array:
-			for i := 0; i < val.Len(); i++ {
-				contexts = append(contexts, val.Index(i))
-			}
-		case reflect.Map, reflect.Struct:
+		if _, ok := value.Interface().(CustomLookup); ok {
 			contexts = append(contexts, value)
-		case reflect.Func:
-			var text bytes.Buffer
-			getSectionText(section.elems, &text)
-			render := func(text string) (string, error) {
-				templ, err := ParseString(text)
-				if err != nil {
-					return "", err
+		} else {
+			valueInd := indirect(value)
+			switch val := valueInd; val.Kind() {
+			case reflect.Slice:
+				for i := 0; i < val.Len(); i++ {
+					contexts = append(contexts, val.Index(i))
 				}
-				var buf bytes.Buffer
-				err = templ.renderTemplate(contextChain, &buf)
-				if err != nil {
-					return "", err
+			case reflect.Array:
+				for i := 0; i < val.Len(); i++ {
+					contexts = append(contexts, val.Index(i))
 				}
-				return buf.String(), nil
+			case reflect.Map, reflect.Struct:
+				contexts = append(contexts, value)
+			case reflect.Func:
+				var text bytes.Buffer
+				getSectionText(section.elems, &text)
+				render := func(text string) (string, error) {
+					templ, err := ParseString(text)
+					if err != nil {
+						return "", err
+					}
+					var buf bytes.Buffer
+					err = templ.renderTemplate(contextChain, &buf)
+					if err != nil {
+						return "", err
+					}
+					return buf.String(), nil
+				}
+				in := []reflect.Value{reflect.ValueOf(text.String()), reflect.ValueOf(render)}
+				res := val.Call(in)
+				res_str := res[0].String()
+				if !res[1].IsNil() {
+					return res[1].Interface().(error)
+				}
+				fmt.Fprintf(buf, "%s", res_str)
+				return nil
+			default:
+				contexts = append(contexts, context)
 			}
-			in := []reflect.Value{reflect.ValueOf(text.String()), reflect.ValueOf(render)}
-			res := val.Call(in)
-			res_str := res[0].String()
-			if !res[1].IsNil() {
-				return res[1].Interface().(error)
-			}
-			fmt.Fprintf(buf, "%s", res_str)
-			return nil
-		default:
-			contexts = append(contexts, context)
 		}
 	} else if section.inverted {
 		contexts = append(contexts, context)
