@@ -17,7 +17,10 @@
 We did yet another fork of
 [cbroglie/mustache](https://github.com/cbroglie/mustache) because it does not
 appear to be maintained, and we need features that various forks implemented,
-but none gather them all. 
+but none gather them all:
+
+- Custom lookup: if data implements the CustomLookup interface, its Lookup 
+  function is called to lookup a name.
 
 This implementation powers our rendering server
 [Redner](https://orbeet.io/services/generateur-documents-redner/).
