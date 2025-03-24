@@ -1,11 +1,11 @@
 # Mustache Template Engine for Go
 
-[![Build Status](https://img.shields.io/travis/cbroglie/mustache.svg)](https://travis-ci.org/cbroglie/mustache)
-[![Go Doc](https://godoc.org/github.com/cbroglie/mustache?status.svg)](https://godoc.org/github.com/cbroglie/mustache)
-[![Go Report Card](https://goreportcard.com/badge/github.com/cbroglie/mustache)](https://goreportcard.com/report/github.com/cbroglie/mustache)
-[![codecov](https://codecov.io/gh/cbroglie/mustache/branch/master/graph/badge.svg)](https://codecov.io/gh/cbroglie/mustache)
-[![Downloads](https://img.shields.io/github/downloads/cbroglie/mustache/latest/total.svg)](https://github.com/cbroglie/mustache/releases)
-[![Latest release](https://img.shields.io/github/release/cbroglie/mustache.svg)](https://github.com/cbroglie/mustache/releases)
+[![Build Status](https://img.shields.io/travis/orus-io/mustache.svg)](https://travis-ci.org/orus-io/mustache)
+[![Go Doc](https://godoc.org/github.com/orus-io/mustache?status.svg)](https://godoc.org/github.com/orus-io/mustache)
+[![Go Report Card](https://goreportcard.com/badge/github.com/orus-io/mustache)](https://goreportcard.com/report/github.com/orus-io/mustache)
+[![codecov](https://codecov.io/gh/orus-io/mustache/branch/master/graph/badge.svg)](https://codecov.io/gh/orus-io/mustache)
+[![Downloads](https://img.shields.io/github/downloads/orus-io/mustache/latest/total.svg)](https://github.com/orus-io/mustache/releases)
+[![Latest release](https://img.shields.io/github/release/orus-io/mustache.svg)](https://github.com/orus-io/mustache/releases)
 
 
 <img src="./images/logo.jpeg" alt="logo" width="100"/>
@@ -14,17 +14,20 @@
 
 ## Why a Fork?
 
-I forked [hoisie/mustache](https://github.com/hoisie/mustache) because it does not appear to be maintained, and I wanted to add the following functionality:
+We did yet another fork of
+[cbroglie/mustache](https://github.com/cbroglie/mustache) because it does not
+appear to be maintained, and we need features that various forks implemented,
+but none gather them all. 
 
-- Update the API to follow the idiomatic Go convention of returning errors (this is a breaking change)
-- Add option to treat missing variables as errors
+This implementation powers our rendering server
+[Redner](https://orbeet.io/services/generateur-documents-redner/).
 
 ----
 
 ## CLI Overview
 
 ```bash
-➜  ~ go install github.com/cbroglie/mustache/cmd/mustache@latest
+➜  ~ go install github.com/orus-io/mustache/cmd/mustache@latest
 ➜  ~ mustache
 Usage:
   mustache [data] template [flags]
@@ -64,7 +67,7 @@ Also check out some [example mustache files](http://github.com/mustache/mustache
 
 ## Installation
 
-To install the CLI, run `go install github.com/cbroglie/mustache/cmd/mustache@latest`. To use it in a program, run `go get github.com/cbroglie/mustache` and use `import "github.com/cbroglie/mustache"`.
+To install the CLI, run `go install github.com/orus-io/mustache/cmd/mustache@latest`. To use it in a program, run `go get github.com/orus-io/mustache` and use `import "github.com/orus-io/mustache"`.
 
 ----
 

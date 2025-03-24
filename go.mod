@@ -1,4 +1,4 @@
-module github.com/cbroglie/mustache
+module github.com/orus-io/mustache
 
 go 1.20
 
