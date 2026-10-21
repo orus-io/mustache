@@ -669,16 +669,22 @@ var tagTests = []tagsTest{
 }
 
 type FakeLookup struct {
-	vars []string
+	vars   []string
+	usages []LookupUsage
 }
 
-func (f *FakeLookup) Lookup(name string) (reflect.Value, error) {
+func (f *FakeLookup) Lookup(name string, usage LookupUsage) (reflect.Value, error) {
 	f.vars = append(f.vars, name)
+	f.usages = append(f.usages, usage)
 	return reflect.ValueOf(name), nil
 }
 
 func (f *FakeLookup) List() []string {
 	return f.vars
+}
+
+func (f *FakeLookup) UsageList() []LookupUsage {
+	return f.usages
 }
 
 func TestLookup(t *testing.T) {
@@ -703,6 +709,143 @@ func TestLookup(t *testing.T) {
 	}
 	if varList[1] != "var2" {
 		t.Error("expected var2 got", varList[1])
+	}
+	usageList := sl.UsageList()
+	if len(usageList) != 2 {
+		t.Error("expected 2 usages got", len(usageList))
+	}
+	for i, usage := range usageList {
+		if usage != UsageVariable {
+			t.Errorf("variable %q: expected usage %s, got %s", varList[i], UsageVariable, usage)
+		}
+	}
+}
+
+type usageExpectation struct {
+	name  string
+	usage LookupUsage
+}
+
+func checkLookups(t *testing.T, sl *FakeLookup, expected []usageExpectation) {
+	t.Helper()
+	if len(sl.vars) != len(expected) {
+		t.Fatalf("expected %d lookups, got %d: %v", len(expected), len(sl.vars), sl.vars)
+	}
+	for i, e := range expected {
+		if sl.vars[i] != e.name {
+			t.Errorf("lookup %d: expected name %q, got %q", i, e.name, sl.vars[i])
+		}
+		if sl.usages[i] != e.usage {
+			t.Errorf("lookup %d (%s): expected usage %s, got %s", i, e.name, e.usage, sl.usages[i])
+		}
+	}
+}
+
+func TestLookupUsage(t *testing.T) {
+	mt, err := ParseString(`{{var}}{{#section}}x{{/section}}{{^inverted}}x{{/inverted}}`)
+	if err != nil {
+		t.Error(err)
+	}
+	sl := FakeLookup{}
+	if _, err = mt.Render(&sl); err != nil {
+		t.Error(err)
+	}
+	checkLookups(t, &sl, []usageExpectation{
+		{"var", UsageVariable},
+		{"section", UsageSection},
+		{"inverted", UsageInvertedSection},
+	})
+}
+
+// fakeParentLookup is a CustomLookup that records the lookups it receives
+// into a shared FakeLookup, and resolves any name to its child.
+type fakeParentLookup struct {
+	fake  *FakeLookup
+	child interface{}
+}
+
+func (p *fakeParentLookup) Lookup(name string, usage LookupUsage) (reflect.Value, error) {
+	p.fake.vars = append(p.fake.vars, name)
+	p.fake.usages = append(p.fake.usages, usage)
+	return reflect.ValueOf(p.child), nil
+}
+
+func TestLookupUsageDottedPath(t *testing.T) {
+	mt, err := ParseString(`{{a.b.c}}`)
+	if err != nil {
+		t.Error(err)
+	}
+	sl := FakeLookup{}
+	leaf := &fakeParentLookup{fake: &sl, child: "value"}
+	middle := &fakeParentLookup{fake: &sl, child: leaf}
+	root := &fakeParentLookup{fake: &sl, child: middle}
+
+	output, err := mt.Render(root)
+	if err != nil {
+		t.Error(err)
+	}
+	if output != "value" {
+		t.Errorf("expected output %q, got %q", "value", output)
+	}
+	checkLookups(t, &sl, []usageExpectation{
+		{"a", UsagePathLead},
+		{"b", UsagePathLead},
+		{"c", UsageVariable},
+	})
+}
+
+func TestLookupUsageDottedSection(t *testing.T) {
+	mt, err := ParseString(`{{#a.b}}x{{/a.b}}{{^c.d}}y{{/c.d}}`)
+	if err != nil {
+		t.Error(err)
+	}
+	sl := FakeLookup{}
+	middle := &fakeParentLookup{fake: &sl, child: "non-false"}
+	root := &fakeParentLookup{fake: &sl, child: middle}
+
+	output, err := mt.Render(root)
+	if err != nil {
+		t.Error(err)
+	}
+	// the inverted section does not render: "d" resolves to a non-false value
+	if output != "x" {
+		t.Errorf("expected output %q, got %q", "x", output)
+	}
+	checkLookups(t, &sl, []usageExpectation{
+		{"a", UsagePathLead},
+		{"b", UsageSection},
+		{"c", UsagePathLead},
+		{"d", UsageInvertedSection},
+	})
+}
+
+type LegacyFakeLookup struct {
+	vars []string
+}
+
+func (f *LegacyFakeLookup) Lookup(name string) (reflect.Value, error) {
+	f.vars = append(f.vars, name)
+	return reflect.ValueOf(name), nil
+}
+
+func TestLegacyLookup(t *testing.T) {
+	mt, err := ParseString(`{{var1}}{{var2}}`)
+	if err != nil {
+		t.Error(err)
+	}
+	sl := LegacyFakeLookup{}
+	output, err := mt.Render(&sl)
+	if err != nil {
+		t.Error(err)
+	}
+	if output != "var1var2" {
+		t.Errorf("expected output %q, got %q", "var1var2", output)
+	}
+	if len(sl.vars) != 2 {
+		t.Error("expected 2 variables got", len(sl.vars))
+	}
+	if sl.vars[0] != "var1" || sl.vars[1] != "var2" {
+		t.Error("unexpected variables", sl.vars)
 	}
 }
 

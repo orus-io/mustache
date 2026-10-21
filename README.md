@@ -20,7 +20,9 @@ appear to be maintained, and we need features that various forks implemented,
 but none gather them all:
 
 - Custom lookup: if data implements the CustomLookup interface, its Lookup 
-  function is called to lookup a name.
+  function is called to lookup a name, with the information of how the
+  variable is used in the template. The former interface, without the usage
+  information, is still supported as LegacyCustomLookup.
 
 This implementation powers our rendering server
 [Redner](https://orbeet.io/services/generateur-documents-redner/).
@@ -197,6 +199,44 @@ sp := StaticProvider(map[string]string{
 })
 
 tmpl, err := ParseStringPartials("This partial is loaded from a map: {{>foo}}", sp)
+```
+
+----
+
+## Custom Lookup
+
+When a variable of a template is looked up in a context that implements the
+`CustomLookup` interface, the `Lookup` method is called with the name of the
+variable and the way it is used in the template:
+
+```go
+type CustomLookup interface {
+	Lookup(name string, usage LookupUsage) (reflect.Value, error)
+}
+```
+
+The possible usages are:
+
+- `UsageVariable`: the variable is interpolated in a simple tag (`{{name}}`)
+- `UsageSection`: the variable is used as a section (`{{#name}}`)
+- `UsageInvertedSection`: the variable is used as an inverted section (`{{^name}}`)
+- `UsagePathLead`: the variable is a non-final element of a dotted name (`{{name.sub}}`)
+
+In a dotted name such as `{{a.b.c}}`, `a` and `b` are looked up with
+`UsagePathLead`, and `c` with the usage of its tag (`UsageVariable` here, or
+`UsageSection` for `{{#a.b.c}}`).
+
+If `Lookup` returns an invalid `reflect.Value`, the lookup continues with the
+default resolution (methods, struct fields and map keys), then with the parent
+contexts.
+
+The former version of the interface, which does not know the usage, is still
+supported:
+
+```go
+type LegacyCustomLookup interface {
+	Lookup(name string) (reflect.Value, error)
+}
 ```
 
 ----

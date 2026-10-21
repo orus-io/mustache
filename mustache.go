@@ -32,10 +32,6 @@ type EscapeFunc func(text string) string
 // represents. The zero TagType is not a valid type.
 type TagType uint
 
-type CustomLookup interface {
-	Lookup(name string) (reflect.Value, error)
-}
-
 // Defines representing the possible Tag types
 const (
 	Invalid TagType = iota
@@ -64,6 +60,56 @@ var tagNames = []string{
 	Section:         "Section",
 	InvertedSection: "InvertedSection",
 	Partial:         "Partial",
+}
+
+// A LookupUsage represents the way a variable is used in the template.
+// The zero LookupUsage is not a valid usage.
+type LookupUsage uint
+
+// Defines representing the possible usages of a variable
+const (
+	// UsageVariable means the variable is interpolated in a simple tag:
+	// {{name}}
+	UsageVariable LookupUsage = iota + 1
+	// UsageSection means the variable is used as a section: {{#name}}
+	UsageSection
+	// UsageInvertedSection means the variable is used as an inverted
+	// section: {{^name}}
+	UsageInvertedSection
+	// UsagePathLead means the variable is a non-final element of a dotted
+	// name: {{name.sub}}
+	UsagePathLead
+)
+
+func (u LookupUsage) String() string {
+	if int(u) > 0 && int(u) < len(usageNames) {
+		return usageNames[u]
+	}
+	return "usage" + strconv.Itoa(int(u))
+}
+
+var usageNames = []string{
+	UsageVariable:        "Variable",
+	UsageSection:         "Section",
+	UsageInvertedSection: "InvertedSection",
+	UsagePathLead:        "PathLead",
+}
+
+// CustomLookup is implemented by types that want to control the lookup of
+// the variables of a template. Lookup is called with the name of the
+// variable and the way it is used in the template (see LookupUsage).
+//
+// If Lookup returns an invalid reflect.Value, the lookup continues with the
+// default resolution (methods, struct fields and map keys), then with the
+// parent contexts.
+type CustomLookup interface {
+	Lookup(name string, usage LookupUsage) (reflect.Value, error)
+}
+
+// LegacyCustomLookup is the former version of CustomLookup, whose Lookup
+// function does not know how the variable is used in the template.
+type LegacyCustomLookup interface {
+	Lookup(name string) (reflect.Value, error)
 }
 
 // Tag represents the different mustache tag types.
@@ -473,18 +519,19 @@ func (tmpl *Template) parse() error {
 	}
 }
 
-// Evaluate interfaces and pointers looking for a value that can look up the name, via a
-// struct field, method, or map key, and return the result of the lookup.
-func lookup(contextChain []interface{}, name string, allowMissing bool) (reflect.Value, error) {
+// Evaluate interfaces and pointers looking for a value that can look up the
+// name, via a CustomLookup or LegacyCustomLookup implementation, a struct
+// field, method, or map key, and return the result of the lookup.
+func lookup(contextChain []interface{}, name string, allowMissing bool, usage LookupUsage) (reflect.Value, error) {
 	// dot notation
 	if name != "." && strings.Contains(name, ".") {
 		parts := strings.SplitN(name, ".", 2)
 
-		v, err := lookup(contextChain, parts[0], allowMissing)
+		v, err := lookup(contextChain, parts[0], allowMissing, UsagePathLead)
 		if err != nil {
 			return v, err
 		}
-		return lookup([]interface{}{v}, parts[1], allowMissing)
+		return lookup([]interface{}{v}, parts[1], allowMissing, usage)
 	}
 
 	defer func() {
@@ -497,7 +544,15 @@ Outer:
 	for _, ctx := range contextChain {
 		v := ctx.(reflect.Value)
 		if custom, ok := v.Interface().(CustomLookup); ok {
-			v, err := custom.Lookup(name)
+			v, err := custom.Lookup(name, usage)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			if v.IsValid() {
+				return v, nil
+			}
+		} else if legacy, ok := v.Interface().(LegacyCustomLookup); ok {
+			v, err := legacy.Lookup(name)
 			if err != nil {
 				return reflect.Value{}, err
 			}
@@ -582,7 +637,11 @@ loop:
 }
 
 func (tmpl *Template) renderSection(section *sectionElement, contextChain []interface{}, buf io.Writer) error {
-	value, err := lookup(contextChain, section.name, true)
+	usage := UsageSection
+	if section.inverted {
+		usage = UsageInvertedSection
+	}
+	value, err := lookup(contextChain, section.name, true, usage)
 	if err != nil {
 		return err
 	}
@@ -703,7 +762,7 @@ func (tmpl *Template) renderElement(element interface{}, contextChain []interfac
 				fmt.Printf("Panic while looking up %q: %s\n", elem.name, r)
 			}
 		}()
-		val, err := lookup(contextChain, elem.name, AllowMissingVariables)
+		val, err := lookup(contextChain, elem.name, AllowMissingVariables, UsageVariable)
 		if err != nil {
 			return err
 		}
