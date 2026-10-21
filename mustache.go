@@ -36,6 +36,14 @@ type CustomLookup interface {
 	Lookup(name string) (reflect.Value, error)
 }
 
+// An InvertedExplorer is a CustomLookup that has the inside of every inverted section rendered,
+// whatever the section's value. A lookup listing the names a template reads answers every name,
+// so no inverted section would render otherwise, and the names inside one would go unlisted.
+type InvertedExplorer interface {
+	CustomLookup
+	ExploresInverted() bool
+}
+
 // Defines representing the possible Tag types
 const (
 	Invalid TagType = iota
@@ -581,6 +589,21 @@ loop:
 	return v
 }
 
+// exploresInverted reports whether a context of the chain is an InvertedExplorer asking for the
+// inside of inverted sections.
+func exploresInverted(contextChain []interface{}) bool {
+	for _, ctx := range contextChain {
+		v, ok := ctx.(reflect.Value)
+		if !ok || !v.IsValid() || !v.CanInterface() {
+			continue
+		}
+		if explorer, ok := v.Interface().(InvertedExplorer); ok && explorer.ExploresInverted() {
+			return true
+		}
+	}
+	return false
+}
+
 func (tmpl *Template) renderSection(section *sectionElement, contextChain []interface{}, buf io.Writer) error {
 	value, err := lookup(contextChain, section.name, true)
 	if err != nil {
@@ -589,7 +612,7 @@ func (tmpl *Template) renderSection(section *sectionElement, contextChain []inte
 	var context = contextChain[0].(reflect.Value)
 	var contexts = []interface{}{}
 	// if the value is nil, check if it's an inverted section
-	isEmpty := isEmpty(value)
+	isEmpty := isEmpty(value) || section.inverted && exploresInverted(contextChain)
 	if isEmpty && !section.inverted || !isEmpty && section.inverted {
 		return nil
 	} else if !section.inverted {

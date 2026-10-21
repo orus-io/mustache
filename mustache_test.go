@@ -706,6 +706,35 @@ func TestLookup(t *testing.T) {
 	}
 }
 
+type ExploringLookup struct {
+	FakeLookup
+}
+
+func (e *ExploringLookup) ExploresInverted() bool {
+	return true
+}
+
+func TestInvertedExplored(t *testing.T) {
+	mt, err := ParseString(`{{#shown}}{{inside}}{{/shown}}{{^hidden}}{{unless}}{{/hidden}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := FakeLookup{}
+	if _, err := mt.Render(&plain); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(plain.List(), " "), "shown inside hidden"; got != want {
+		t.Errorf("a plain lookup listed %q, expected %q", got, want)
+	}
+	exploring := ExploringLookup{}
+	if _, err := mt.Render(&exploring); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(exploring.List(), " "), "shown inside hidden unless"; got != want {
+		t.Errorf("an exploring lookup listed %q, expected %q", got, want)
+	}
+}
+
 func TestTags(t *testing.T) {
 	for _, test := range tagTests {
 		testTags(t, &test)

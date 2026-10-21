@@ -21,6 +21,9 @@ but none gather them all:
 
 - Custom lookup: if data implements the CustomLookup interface, its Lookup 
   function is called to lookup a name.
+- Inverted sections explored: if a custom lookup also implements the
+  InvertedExplorer interface, the inside of every inverted section is rendered,
+  so a lookup listing the names a template reads finds those inside too.
 
 This implementation powers our rendering server
 [Redner](https://orbeet.io/services/generateur-documents-redner/).
